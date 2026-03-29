@@ -27,7 +27,7 @@ See [INSTALLATION.md](INSTALLATION.md) for all platforms.
 
 ## Setup
 
-1. Sign up at [forms.rizzness.com](https://forms.rizzness.com/signup)
+1. Sign up at [www.rizzness.com](https://www.rizzness.com/signup)
 2. Create an API key with the **admin** role in Account Settings
 3. Set the environment variable:
    ```bash
