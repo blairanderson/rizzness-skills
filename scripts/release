@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+#
+# release — bump VERSION, commit, tag, push, and create a GitHub release
+#
+# Usage:
+#   scripts/release patch    # 1.0.0 → 1.0.1
+#   scripts/release minor    # 1.0.0 → 1.1.0
+#   scripts/release major    # 1.0.0 → 2.0.0
+
+set -euo pipefail
+
+BUMP="${1:-patch}"
+VERSION_FILE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/VERSION"
+CURRENT=$(cat "$VERSION_FILE" | tr -d '[:space:]')
+
+IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+
+case "$BUMP" in
+  major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+  minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+  patch) PATCH=$((PATCH + 1)) ;;
+  *) echo "Usage: scripts/release [major|minor|patch]" >&2; exit 1 ;;
+esac
+
+NEW="${MAJOR}.${MINOR}.${PATCH}"
+
+echo "$NEW" > "$VERSION_FILE"
+echo "Bumped $CURRENT → $NEW"
+
+git add "$VERSION_FILE"
+git commit -m "Bump version to $NEW"
+git push
+
+gh release create "v${NEW}" --title "v${NEW}" --generate-notes
+echo "Released v${NEW}"
