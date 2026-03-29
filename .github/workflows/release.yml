@@ -1,0 +1,26 @@
+name: Build release artifacts
+
+on:
+  release:
+    types: [created]
+
+jobs:
+  build-zips:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build prompt ZIP (for ChatGPT / Claude Projects)
+        run: zip -r rizzforms-prompt.zip PROMPT.md references/api.md scripts/rizzforms
+
+      - name: Build skill ZIP (for local agents)
+        run: zip -r rizzforms-skill.zip SKILL.md scripts/ references/
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            rizzforms-prompt.zip
+            rizzforms-skill.zip

@@ -2,6 +2,20 @@
 
 A [Claude Code skill](https://docs.anthropic.com/en/docs/claude-code/skills) that lets Claude create forms, configure webhook delivery, manage submissions, and generate embed HTML using the [RizzForms](https://www.rizzness.com) API.
 
+## Supported Platforms
+
+**Local agents** (clone the repo): Claude Code, Cursor, Gemini CLI, VS Code / Copilot
+
+**Web platforms** (paste PROMPT.md): ChatGPT Custom GPTs, Claude Projects, any LLM
+
+## Quick Install
+
+```bash
+git clone https://github.com/blairanderson/rizzness-skills.git ~/.claude/skills/rizzforms
+```
+
+See [INSTALLATION.md](INSTALLATION.md) for all platforms.
+
 ## What it does
 
 - Creates forms via the RizzForms API
@@ -10,20 +24,6 @@ A [Claude Code skill](https://docs.anthropic.com/en/docs/claude-code/skills) tha
 - Generates HTML forms styled for your CSS framework (Tailwind, Bootstrap, plain CSS)
 - Views and searches submissions and spam
 - Manages form settings, plugins, and signing secret rotation
-
-## Install
-
-**Personal skill** (available in all your projects):
-
-```bash
-git clone https://github.com/blairanderson/rizzness-skills.git ~/.claude/skills/rizzforms
-```
-
-**Project skill** (available only in one project):
-
-```bash
-git clone https://github.com/blairanderson/rizzness-skills.git .claude/skills/rizzforms
-```
 
 ## Setup
 
@@ -48,7 +48,9 @@ Claude will use the skill automatically when it recognizes form-related tasks.
 ## Skill structure
 
 ```
-├── SKILL.md              # Main instructions Claude follows
+├── SKILL.md              # Instructions for local agents (Claude Code, Cursor, etc.)
+├── PROMPT.md             # Self-contained prompt for web platforms (ChatGPT, Claude Projects)
+├── INSTALLATION.md       # Per-platform install guide
 ├── scripts/
 │   └── rizzforms         # Bundled CLI for all API operations
 └── references/
