@@ -1,0 +1,411 @@
+#!/usr/bin/env bash
+#
+# rizzforms — CLI for the RizzForms API
+#
+# Usage: rizzforms <command> [options]
+#
+# Configuration:
+#   RIZZFORMS_API_KEY   — Bearer token (frk_...)
+#   RIZZFORMS_API_URL   — API base URL (default: https://www.rizzness.com)
+#   RIZZFORMS_FORMS_URL — Ingest base URL (default: https://forms.rizzness.com)
+#
+# Or use: rizzforms config
+
+set -euo pipefail
+
+API_URL="${RIZZFORMS_API_URL:-https://www.rizzness.com}"
+FORMS_URL="${RIZZFORMS_FORMS_URL:-https://forms.rizzness.com}"
+CONFIG_FILE="${HOME}/.config/rizzforms/config"
+
+# Load config file if it exists
+if [[ -f "$CONFIG_FILE" ]]; then
+  # shellcheck source=/dev/null
+  source "$CONFIG_FILE"
+fi
+
+# Also check .env in the script's directory (for RIZZNESS_KEY compat)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [[ -f "${SCRIPT_DIR}/.env" ]]; then
+  RIZZNESS_KEY_FROM_ENV=$(grep -E '^RIZZNESS_KEY=' "${SCRIPT_DIR}/.env" 2>/dev/null | cut -d= -f2-)
+fi
+
+API_KEY="${RIZZFORMS_API_KEY:-${RIZZNESS_KEY_FROM_ENV:-}}"
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+DIM='\033[2m'
+NC='\033[0m'
+
+# Check for jq
+has_jq() { command -v jq &>/dev/null; }
+
+# Pretty-print JSON if jq is available
+pp_json() {
+  if has_jq; then
+    jq '.'
+  else
+    cat
+  fi
+}
+
+# Extract field from JSON (requires jq)
+json_get() {
+  if has_jq; then
+    jq -r "$1"
+  else
+    echo "(install jq for parsed output)"
+  fi
+}
+
+err() { echo -e "${RED}error:${NC} $*" >&2; exit 1; }
+warn() { echo -e "${YELLOW}warning:${NC} $*" >&2; }
+info() { echo -e "${BLUE}→${NC} $*"; }
+success() { echo -e "${GREEN}✓${NC} $*"; }
+
+require_key() {
+  [[ -n "$API_KEY" ]] || err "No API key set. Run 'rizzforms config' or export RIZZFORMS_API_KEY"
+}
+
+# Core HTTP helper
+api() {
+  local method="$1" path="$2"
+  shift 2
+  require_key
+  curl -sf -X "$method" \
+    -H "Authorization: Bearer ${API_KEY}" \
+    -H "Content-Type: application/json" \
+    -H "Accept: application/json" \
+    "${API_URL}${path}" \
+    "$@"
+}
+
+# ─── Commands ──────────────────────────────────────────────────────────────────
+
+cmd_help() {
+  cat <<'USAGE'
+rizzforms — CLI for the RizzForms API
+
+USAGE:
+  rizzforms <command> [args]
+
+COMMANDS:
+  config                     Configure API key and URLs
+  api                        Hit the HATEOAS root (/api/)
+  forms                      List all forms
+  forms:show  <token>        Show form details
+  forms:create <name>        Create a new form
+  forms:update <token> [..] Update a form
+  submissions [options]      List submissions
+  submissions:show <id>      Show submission details
+  spam [options]             List spam submissions
+  plugins <token>            List plugins for a form
+  plugins:create <token> <url>  Add webhook plugin
+  plugins:delete <token> <id>   Remove a plugin
+  plugins:rotate <token> <id>   Rotate webhook signing secret
+  submit <token> [json]      Submit to a form (JSON ingest)
+  test <token> [json]        Test submit (synchronous delivery)
+  curl <token>               Print curl examples for a form
+  embed <token>              Print embed HTML for a form
+
+OPTIONS (submissions/spam):
+  --form <token>             Filter by form
+  --range <24h|7d|30d>       Time range (default: 24h)
+  --search <query>           Search payload/referrer
+
+ENVIRONMENT:
+  RIZZFORMS_API_KEY          API key (frk_...)
+  RIZZFORMS_API_URL          API base (default: https://www.rizzness.com)
+  RIZZFORMS_FORMS_URL        Ingest base (default: https://forms.rizzness.com)
+
+USAGE
+}
+
+cmd_config() {
+  mkdir -p "$(dirname "$CONFIG_FILE")"
+
+  echo -e "${BOLD}RizzForms CLI Configuration${NC}"
+  echo
+
+  local key url forms_url
+  read -rp "API Key (frk_...): " key
+  read -rp "API URL [${API_URL}]: " url
+  read -rp "Forms URL [${FORMS_URL}]: " forms_url
+
+  url="${url:-$API_URL}"
+  forms_url="${forms_url:-$FORMS_URL}"
+
+  cat > "$CONFIG_FILE" <<EOF
+RIZZFORMS_API_KEY="${key}"
+RIZZFORMS_API_URL="${url}"
+RIZZFORMS_FORMS_URL="${forms_url}"
+EOF
+
+  chmod 600 "$CONFIG_FILE"
+  success "Config saved to ${CONFIG_FILE}"
+
+  # Test the key
+  API_KEY="$key"
+  API_URL="$url"
+  echo
+  info "Testing connection..."
+  local resp
+  if resp=$(api GET /api/ 2>&1); then
+    success "Connected!"
+    echo "$resp" | pp_json
+  else
+    warn "Could not connect. Check your API key and URL."
+  fi
+}
+
+cmd_api() {
+  api GET /api/ | pp_json
+}
+
+# ─── Forms ─────────────────────────────────────────────────────────────────────
+
+cmd_forms() {
+  local resp
+  resp=$(api GET /api/forms)
+
+  if has_jq; then
+    local count
+    count=$(echo "$resp" | jq 'length')
+    echo -e "${BOLD}Forms (${count}):${NC}"
+    echo
+    echo "$resp" | jq -r '.[] | "\(.endpoint_token)\t\(.name)\tactive=\(.is_active)\tsubs=\(.submission_count)"' | column -t -s$'\t'
+  else
+    echo "$resp" | pp_json
+  fi
+}
+
+cmd_forms_show() {
+  local token="${1:-}"
+  [[ -n "$token" ]] || err "Usage: rizzforms forms:show <endpoint_token>"
+  api GET "/api/forms/${token}" | pp_json
+}
+
+cmd_forms_create() {
+  local name="${1:-}"
+  [[ -n "$name" ]] || err "Usage: rizzforms forms:create <name>"
+  local resp
+  resp=$(api POST /api/forms -d "{\"name\": \"${name}\"}")
+
+  if has_jq; then
+    local token
+    token=$(echo "$resp" | jq -r '.endpoint_token')
+    success "Form created: ${token}"
+    echo
+    echo "$resp" | pp_json
+  else
+    echo "$resp" | pp_json
+  fi
+}
+
+cmd_forms_update() {
+  local token="${1:-}"
+  [[ -n "$token" ]] || err "Usage: rizzforms forms:update <token> [--name NAME] [--redirect URL] [--active true|false]"
+  shift
+
+  local data="{}"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --name)     data=$(echo "$data" | jq --arg v "$2" '. + {name: $v}'); shift 2 ;;
+      --redirect) data=$(echo "$data" | jq --arg v "$2" '. + {success_redirect_url: $v}'); shift 2 ;;
+      --active)   data=$(echo "$data" | jq --argjson v "$2" '. + {is_active: $v}'); shift 2 ;;
+      *) err "Unknown option: $1" ;;
+    esac
+  done
+
+  api PATCH "/api/forms/${token}" -d "$data" | pp_json
+}
+
+# ─── Submissions ───────────────────────────────────────────────────────────────
+
+build_submissions_query() {
+  local query=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --form)   query="${query}&form_id=$2"; shift 2 ;;
+      --range)  query="${query}&range=$2"; shift 2 ;;
+      --search) query="${query}&q=$2"; shift 2 ;;
+      *) err "Unknown option: $1" ;;
+    esac
+  done
+  # strip leading &
+  echo "${query#&}"
+}
+
+cmd_submissions() {
+  local query
+  query=$(build_submissions_query "$@")
+  local path="/api/submissions"
+  [[ -n "$query" ]] && path="${path}?${query}"
+
+  local resp
+  resp=$(api GET "$path")
+
+  if has_jq; then
+    local count
+    count=$(echo "$resp" | jq 'length')
+    echo -e "${BOLD}Submissions (${count}):${NC}"
+    echo
+    echo "$resp" | jq -r '.[] | "\(.id)\t\(.form_endpoint_token)\t\(.created_at)\t\(.payload_json | tostring | .[0:60])"' 2>/dev/null | column -t -s$'\t'
+  else
+    echo "$resp" | pp_json
+  fi
+}
+
+cmd_submissions_show() {
+  local id="${1:-}"
+  [[ -n "$id" ]] || err "Usage: rizzforms submissions:show <id>"
+  api GET "/api/submissions/${id}" | pp_json
+}
+
+cmd_spam() {
+  local query
+  query=$(build_submissions_query "$@")
+  local path="/api/submissions/spam"
+  [[ -n "$query" ]] && path="${path}?${query}"
+
+  local resp
+  resp=$(api GET "$path")
+
+  if has_jq; then
+    local count
+    count=$(echo "$resp" | jq 'length')
+    echo -e "${BOLD}Spam submissions (${count}):${NC}"
+    echo
+    echo "$resp" | jq -r '.[] | "\(.id)\t\(.form_endpoint_token)\t\(.created_at)\t\(.payload_json | tostring | .[0:60])"' 2>/dev/null | column -t -s$'\t'
+  else
+    echo "$resp" | pp_json
+  fi
+}
+
+# ─── Plugins ───────────────────────────────────────────────────────────────────
+
+cmd_plugins() {
+  local token="${1:-}"
+  [[ -n "$token" ]] || err "Usage: rizzforms plugins <endpoint_token>"
+  api GET "/api/forms/${token}/plugins" | pp_json
+}
+
+cmd_plugins_create() {
+  local token="${1:-}" url="${2:-}"
+  [[ -n "$token" && -n "$url" ]] || err "Usage: rizzforms plugins:create <endpoint_token> <webhook_url>"
+  api POST "/api/forms/${token}/plugins" \
+    -d "{\"plugin_type\": \"webhook\", \"config\": {\"url\": \"${url}\"}}" | pp_json
+}
+
+cmd_plugins_delete() {
+  local token="${1:-}" id="${2:-}"
+  [[ -n "$token" && -n "$id" ]] || err "Usage: rizzforms plugins:delete <endpoint_token> <plugin_id>"
+  api DELETE "/api/forms/${token}/plugins/${id}" | pp_json
+}
+
+cmd_plugins_rotate() {
+  local token="${1:-}" id="${2:-}"
+  [[ -n "$token" && -n "$id" ]] || err "Usage: rizzforms plugins:rotate <endpoint_token> <plugin_id>"
+  api POST "/api/forms/${token}/plugins/${id}/rotate_secret" | pp_json
+}
+
+# ─── Ingest ────────────────────────────────────────────────────────────────────
+
+cmd_submit() {
+  local token="${1:-}" payload="${2:-}"
+  [[ -n "$token" ]] || err "Usage: rizzforms submit <endpoint_token> [json_payload]"
+
+  if [[ -z "$payload" ]]; then
+    # Read from stdin
+    payload=$(cat)
+  fi
+
+  curl -sf -X POST \
+    -H "Content-Type: application/json" \
+    "${FORMS_URL}/json/${token}" \
+    -d "$payload" | pp_json
+}
+
+cmd_test() {
+  local token="${1:-}" payload="${2:-}"
+  [[ -n "$token" ]] || err "Usage: rizzforms test <endpoint_token> [json_payload]"
+
+  if [[ -z "$payload" ]]; then
+    payload='{"name": "CLI Test", "email": "test@example.com", "message": "Test submission from rizzforms CLI"}'
+    info "Using default test payload"
+  fi
+
+  curl -sf -X POST \
+    -H "Content-Type: application/json" \
+    "${FORMS_URL}/json/${token}?test=true" \
+    -d "$payload" | pp_json
+}
+
+# ─── Convenience ───────────────────────────────────────────────────────────────
+
+cmd_curl() {
+  local token="${1:-}"
+  [[ -n "$token" ]] || err "Usage: rizzforms curl <endpoint_token>"
+
+  local resp
+  resp=$(api GET "/api/forms/${token}")
+
+  if has_jq; then
+    echo -e "${BOLD}JSON submission:${NC}"
+    echo "$resp" | jq -r '.examples.submit_json'
+    echo
+    echo -e "${BOLD}HTML form submission:${NC}"
+    echo "$resp" | jq -r '.examples.submit_html'
+  else
+    echo "$resp" | pp_json
+  fi
+}
+
+cmd_embed() {
+  local token="${1:-}"
+  [[ -n "$token" ]] || err "Usage: rizzforms embed <endpoint_token>"
+
+  local resp
+  resp=$(api GET "/api/forms/${token}")
+
+  if has_jq; then
+    echo "$resp" | jq -r '.embed_html'
+  else
+    echo "$resp" | pp_json
+  fi
+}
+
+# ─── Router ────────────────────────────────────────────────────────────────────
+
+main() {
+  local cmd="${1:-help}"
+  shift 2>/dev/null || true
+
+  case "$cmd" in
+    help|--help|-h)       cmd_help ;;
+    config)               cmd_config ;;
+    api)                  cmd_api ;;
+    forms)                cmd_forms ;;
+    forms:show)           cmd_forms_show "$@" ;;
+    forms:create)         cmd_forms_create "$@" ;;
+    forms:update)         cmd_forms_update "$@" ;;
+    submissions)          cmd_submissions "$@" ;;
+    submissions:show)     cmd_submissions_show "$@" ;;
+    spam)                 cmd_spam "$@" ;;
+    plugins)              cmd_plugins "$@" ;;
+    plugins:create)       cmd_plugins_create "$@" ;;
+    plugins:delete)       cmd_plugins_delete "$@" ;;
+    plugins:rotate)       cmd_plugins_rotate "$@" ;;
+    submit)               cmd_submit "$@" ;;
+    test)                 cmd_test "$@" ;;
+    curl)                 cmd_curl "$@" ;;
+    embed)                cmd_embed "$@" ;;
+    *)                    err "Unknown command: ${cmd}. Run 'rizzforms help' for usage." ;;
+  esac
+}
+
+main "$@"
