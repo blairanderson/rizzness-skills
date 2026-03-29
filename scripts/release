@@ -9,7 +9,19 @@
 
 set -euo pipefail
 
-BUMP="${1:-patch}"
+if [[ $# -eq 0 ]]; then
+  CURRENT=$(cat "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/VERSION" | tr -d '[:space:]')
+  echo "Current version: $CURRENT"
+  echo ""
+  echo "Usage: scripts/release [major|minor|patch]"
+  echo ""
+  echo "  patch    $CURRENT → $(echo "$CURRENT" | awk -F. '{print $1"."$2"."$3+1}')"
+  echo "  minor    $CURRENT → $(echo "$CURRENT" | awk -F. '{print $1"."$2+1".0"}')"
+  echo "  major    $CURRENT → $(echo "$CURRENT" | awk -F. '{print $1+1".0.0"}')"
+  exit 1
+fi
+
+BUMP="$1"
 VERSION_FILE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/VERSION"
 CURRENT=$(cat "$VERSION_FILE" | tr -d '[:space:]')
 
