@@ -13,8 +13,16 @@ A [Claude Code skill](https://docs.anthropic.com/en/docs/claude-code/skills) tha
 
 ## Install
 
+**Personal skill** (available in all your projects):
+
 ```bash
-claude skill add --from https://github.com/blairanderson/rizzness-skills
+git clone https://github.com/blairanderson/rizzness-skills.git ~/.claude/skills/rizzforms
+```
+
+**Project skill** (available only in one project):
+
+```bash
+git clone https://github.com/blairanderson/rizzness-skills.git .claude/skills/rizzforms
 ```
 
 ## Setup
