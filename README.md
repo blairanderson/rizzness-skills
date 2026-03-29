@@ -1,6 +1,9 @@
-# RizzForms Skill for Claude
+# RizzForms [Form Backend](https://www.rizzness.com) Skill for Claude/Codex/OpenClaw
 
-A [Claude Code skill](https://docs.anthropic.com/en/docs/claude-code/skills) that lets Claude create forms, configure webhook delivery, manage submissions, and generate embed HTML using the [RizzForms](https://www.rizzness.com) API.
+An skill that lets Claude/Codex/ChatGPT create forms, configure webhook delivery, manage submissions, and generate embed HTML using the [RizzForms](https://www.rizzness.com) API.
+
+
+Main benefits of RizzNess are deep integrations with Cloudflare Spam protection, Google Maps Address Autocomplete, and smart email routing. 
 
 ## Supported Platforms
 
