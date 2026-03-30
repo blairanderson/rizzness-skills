@@ -43,7 +43,7 @@ You need a RizzForms API key with the **admin** role (prefix `frk_`).
 `~/.config/rizzforms/config`.
 
 **If no API key exists:**
-1. Sign up at https://forms.rizzness.com/signup
+1. Sign up at https://www.rizzness.com/signup
 2. Go to Account Settings > API Keys > Create API Key (select Admin role)
 3. Set it: `export RIZZFORMS_API_KEY="frk_..."`
 

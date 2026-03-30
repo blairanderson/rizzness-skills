@@ -13,6 +13,14 @@ Main benefits of RizzNess are deep integrations with Cloudflare Spam protection,
 
 ## Quick Install
 
+### npx skills
+
+```bash
+npx skills add blairanderson/rizzness-skills
+```
+
+### copy the contents directly
+
 ```bash
 git clone https://github.com/blairanderson/rizzness-skills.git ~/.claude/skills/rizzforms
 ```
@@ -78,4 +86,4 @@ Run `rizzforms help` for the full command list.
 
 - [RizzForms](https://www.rizzness.com) — Form backend service
 - [Documentation](https://www.rizzness.com/docs.md) — Full API docs
-- [Claude Code Skills](https://docs.anthropic.com/en/docs/claude-code/skills) — How skills work
+- [skills.sh](https://skills.sh/blairanderson/rizzness-skills/rizzforms)
