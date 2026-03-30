@@ -87,3 +87,4 @@ Run `rizzforms help` for the full command list.
 - [RizzForms](https://www.rizzness.com) — Form backend service
 - [Documentation](https://www.rizzness.com/docs.md) — Full API docs
 - [skills.sh](https://skills.sh/blairanderson/rizzness-skills/rizzforms)
+- [ClawHub](https://clawhub.ai/blairanderson/rizzforms)
